@@ -1,26 +1,105 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-heading: "Cormorant Garamond", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-body);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: linear-gradient(135deg, #fce4ec 0%, #f3e5f5 30%, #e8d5f5 60%, #d1c4e9 100%);
+  min-height: 100dvh;
+}
+
+.card-shadow {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.card-enter {
+  animation: cardEnter 0.3s ease-out;
+}
+
+@keyframes cardEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.swipe-left {
+  animation: swipeLeft 0.3s ease-in forwards;
+}
+
+.swipe-right {
+  animation: swipeRight 0.3s ease-in forwards;
+}
+
+.swipe-up {
+  animation: swipeUp 0.3s ease-in forwards;
+}
+
+@keyframes swipeLeft {
+  to {
+    opacity: 0;
+    transform: translateX(-120%) rotate(-15deg);
+  }
+}
+
+@keyframes swipeRight {
+  to {
+    opacity: 0;
+    transform: translateX(120%) rotate(15deg);
+  }
+}
+
+@keyframes swipeUp {
+  to {
+    opacity: 0;
+    transform: translateY(-120%);
+  }
+}
+
+.name-letter-n {
+  color: #e53935;
+  font-weight: inherit;
+}
+
+.name-letter-j {
+  color: #e53935;
+  font-weight: inherit;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+}
+
+/* Prevent pull-to-refresh on mobile */
+body {
+  overscroll-behavior-y: contain;
 }
