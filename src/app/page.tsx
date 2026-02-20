@@ -523,10 +523,13 @@ export default function Home() {
 
   // ===== M3 Top App Bar ===== (M3 spec: 64px height, 16px horizontal padding)
   const TopBar = ({ title, leading, trailing }: { title: string; leading?: React.ReactNode; trailing?: React.ReactNode }) => (
-    <div className="flex items-center h-16 px-4" style={{ background: "var(--md-surface-container-low)" }}>
+    <div
+      className="flex items-center h-16 px-4 shrink-0"
+      style={{ background: "var(--md-surface-container-low)", borderBottom: "1px solid var(--md-outline-variant)" }}
+    >
       <div className="w-12 h-12 flex items-center justify-center shrink-0">{leading}</div>
-      <h1 className="flex-1 text-[22px] font-normal ml-1" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface)" }}>{title}</h1>
-      <div className="flex items-center">{trailing}</div>
+      <h1 className="flex-1 text-[22px] font-normal ml-1 truncate" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface)" }}>{title}</h1>
+      <div className="flex items-center shrink-0">{trailing}</div>
     </div>
   );
 
@@ -595,7 +598,7 @@ export default function Home() {
     const isDone = progress && progress.currentIndex >= progress.nameOrder.length;
 
     return (
-      <div className="flex flex-col min-h-dvh" style={{ background: "var(--md-surface-container-low)" }}>
+      <div className="flex flex-col min-h-dvh mx-auto" style={{ background: "var(--md-surface-container-low)", maxWidth: 430 }}>
         {showTutorial && <Tutorial onComplete={completeTutorial} />}
 
         {/* Top bar */}
@@ -606,20 +609,20 @@ export default function Home() {
         />
 
         {/* Stats chips — M3 spec: 32px chip height, 8px gap, 16px horizontal padding */}
-        <div className="flex items-center gap-2 px-4 pb-3 pt-1">
-          <div className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[12px] font-medium leading-[16px]" style={{ background: "var(--md-surface-container)", color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
-            <Icon name="check_circle" size={18} />
-            {ratedCount}
+        <div className="flex items-center gap-2 px-4 py-3">
+          <div className="flex items-center gap-1.5 px-3 h-8 rounded-full text-[12px] font-medium leading-[16px]" style={{ background: "var(--md-surface-container)", color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+            <Icon name="check_circle" size={16} />
+            <span>{ratedCount}</span>
           </div>
-          <div className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[12px] font-medium leading-[16px]" style={{ background: "var(--md-primary-container)", color: "var(--md-on-primary-container)", fontFamily: "var(--font-body)" }}>
-            <Icon name="favorite" filled size={18} />
-            {loveCount}
+          <div className="flex items-center gap-1.5 px-3 h-8 rounded-full text-[12px] font-medium leading-[16px]" style={{ background: "var(--md-primary-container)", color: "var(--md-on-primary-container)", fontFamily: "var(--font-body)" }}>
+            <Icon name="favorite" filled size={16} />
+            <span>{loveCount}</span>
           </div>
-          <div className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[12px] font-medium leading-[16px]" style={{ background: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)", fontFamily: "var(--font-body)" }}>
-            <Icon name="help" size={18} />
-            {maybeCount}
+          <div className="flex items-center gap-1.5 px-3 h-8 rounded-full text-[12px] font-medium leading-[16px]" style={{ background: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)", fontFamily: "var(--font-body)" }}>
+            <Icon name="help" size={16} />
+            <span>{maybeCount}</span>
           </div>
-          <span className="ml-auto text-[12px] leading-[16px]" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>{remaining} left</span>
+          <span className="ml-auto text-[12px] leading-[16px] font-medium" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>{remaining} left</span>
         </div>
 
         {/* Progress — M3 spec: 4px track height */}
@@ -698,17 +701,17 @@ export default function Home() {
           ) : currentName ? (
             <div
               ref={cardRef}
-              className={`w-full max-w-sm rounded-[28px] overflow-hidden ${swipeClass || "card-enter"}`}
+              className={`w-full rounded-[28px] overflow-hidden ${swipeClass || "card-enter"}`}
               style={{ background: "var(--md-surface-container-lowest)", boxShadow: "0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05)" }}
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
             >
-              {/* Header section — M3 card: 16-24px padding */}
-              <div className="px-6 pt-6 pb-4 text-center">
-                <h2 className="text-[36px] font-medium mb-1" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.5px", color: "var(--md-on-surface)" }}>
+              {/* Header section */}
+              <div className="px-6 pt-8 pb-2 text-center">
+                <h2 className="text-[32px] font-medium mb-1" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.25px", color: "var(--md-on-surface)" }}>
                   {renderNameWithHighlight(currentName, "card")}
                 </h2>
-                <p className="text-[16px] leading-[24px] mb-3" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface-variant)" }}>
+                <p className="text-[15px] leading-[22px] mb-3" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface-variant)" }}>
                   {renderNameWithHighlight(currentName, "fullname")}
                 </p>
                 <div className="flex items-center justify-center gap-2">
@@ -725,54 +728,62 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Info rows — M3 list items: 16px padding, proper vertical rhythm */}
-              <div className="px-6 pb-4">
-                <div className="flex items-center gap-4 py-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                  <Icon name="public" size={20} style={{ color: "var(--md-on-surface-variant)" }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Origin</div>
-                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+              {/* Info grid — clean 2-column layout */}
+              <div className="px-6 pb-2">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0">
+                  {/* Origin */}
+                  <div className="py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon name="public" size={16} style={{ color: "var(--md-on-surface-variant)" }} />
+                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Origin</span>
+                    </div>
+                    <div className="text-[14px] leading-[20px] font-medium pl-6" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {currentNameData?.origin || customNameData?.origin || "—"}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Syllables</div>
+                  {/* Syllables */}
+                  <div className="py-3 border-t text-right" style={{ borderColor: "var(--md-outline-variant)" }}>
+                    <div className="flex items-center justify-end gap-2 mb-1">
+                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Syllables</span>
+                    </div>
                     <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {currentNameData?.syllables || "—"}
                     </div>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-4 py-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                  <Icon name="lightbulb" size={20} style={{ color: "var(--md-on-surface-variant)" }} />
-                  <div className="flex-1">
-                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Meaning</div>
-                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+                  {/* Meaning — full width */}
+                  <div className="col-span-2 py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon name="lightbulb" size={16} style={{ color: "var(--md-on-surface-variant)" }} />
+                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Meaning</span>
+                    </div>
+                    <div className="text-[14px] leading-[20px] font-medium pl-6" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {currentNameData?.meaning || customNameData?.meaning || "—"}
                     </div>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-4 py-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                  <Icon name="badge" size={20} style={{ color: "var(--md-on-surface-variant)" }} />
-                  <div className="flex-1">
-                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Nicknames</div>
-                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+                  {/* Nicknames — full width */}
+                  <div className="col-span-2 py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon name="badge" size={16} style={{ color: "var(--md-on-surface-variant)" }} />
+                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Nicknames</span>
+                    </div>
+                    <div className="text-[14px] leading-[20px] font-medium pl-6" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {(currentNameData?.nicknames || customNameData?.nicknames || []).join(", ") || "None"}
                     </div>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-4 py-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                  <Icon name="trending_up" size={20} style={{ color: "var(--md-on-surface-variant)" }} />
-                  <div className="flex-1">
-                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Peak</div>
-                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+                  {/* Peak + Top state */}
+                  <div className="py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon name="trending_up" size={16} style={{ color: "var(--md-on-surface-variant)" }} />
+                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Peak</span>
+                    </div>
+                    <div className="text-[14px] leading-[20px] font-medium pl-6" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {currentNameData?.peakDecades?.join(", ") || "—"}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Top state</div>
+                  <div className="py-3 border-t text-right" style={{ borderColor: "var(--md-outline-variant)" }}>
+                    <div className="flex items-center justify-end gap-2 mb-1">
+                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Top state</span>
+                    </div>
                     <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {currentNameData?.popularState || "—"}
                     </div>
@@ -782,10 +793,10 @@ export default function Home() {
 
               {/* Similar names — collapsible dropdown */}
               {currentNameData?.similarNames && currentNameData.similarNames.length > 0 && (
-                <div className="px-6 pb-6 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                <div className="px-6 pb-4">
                   <button
                     onClick={() => setSimilarOpen(!similarOpen)}
-                    className="state-layer w-full flex items-center justify-between py-3 rounded-lg"
+                    className="state-layer w-full flex items-center justify-between py-3 px-1 rounded-lg"
                     style={{ color: "var(--md-on-surface-variant)" }}
                   >
                     <span className="text-[12px] leading-[16px] font-medium" style={{ fontFamily: "var(--font-body)" }}>
@@ -794,16 +805,16 @@ export default function Home() {
                     <Icon name={similarOpen ? "expand_less" : "expand_more"} size={20} />
                   </button>
                   {similarOpen && (
-                    <div className="flex flex-wrap gap-2 pt-1 pb-1">
+                    <div className="flex flex-wrap gap-2 pt-1 pb-2">
                       {currentNameData.similarNames.map((sn) => (
                         <button
                           key={sn}
                           onClick={() => addToFavorites(sn)}
-                          className="state-layer inline-flex items-center gap-1.5 h-8 px-4 rounded-lg border text-[14px] leading-[20px]"
-                          style={{ borderColor: "var(--md-outline)", color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}
+                          className="state-layer inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-[13px] leading-[18px]"
+                          style={{ borderColor: "var(--md-outline-variant)", color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}
                         >
                           {sn}
-                          <Icon name="favorite" size={16} style={{ color: "var(--md-primary)" }} />
+                          <Icon name="favorite" size={14} style={{ color: "var(--md-primary)" }} />
                         </button>
                       ))}
                     </div>
@@ -818,25 +829,25 @@ export default function Home() {
 
         {/* Rating FABs — M3 spec: 56px regular FAB, 24px gap between */}
         {!isDone && currentName && (
-          <div className="flex items-center justify-center gap-6 py-5">
+          <div className="flex items-center justify-center gap-5 py-4 shrink-0">
             <button
               onClick={() => rateName("pass", "left")}
-              className="state-layer w-14 h-14 flex items-center justify-center rounded-2xl elevation-2 transition-transform active:scale-95"
-              style={{ color: "var(--md-on-surface-variant)" }}
+              className="state-layer w-14 h-14 flex items-center justify-center rounded-full transition-transform active:scale-95"
+              style={{ background: "var(--md-surface-container-highest)", color: "var(--md-on-surface-variant)", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }}
             >
               <Icon name="close" size={24} />
             </button>
             <button
               onClick={() => rateName("maybe", "up")}
-              className="state-layer w-12 h-12 flex items-center justify-center rounded-xl elevation-1 transition-transform active:scale-95"
-              style={{ background: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)" }}
+              className="state-layer w-12 h-12 flex items-center justify-center rounded-full transition-transform active:scale-95"
+              style={{ background: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }}
             >
-              <Icon name="help" size={24} />
+              <Icon name="help" size={22} />
             </button>
             <button
               onClick={() => rateName("love", "right")}
-              className="state-layer w-14 h-14 flex items-center justify-center rounded-2xl transition-transform active:scale-95"
-              style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 4px 8px rgba(180,36,90,0.25)" }}
+              className="state-layer w-14 h-14 flex items-center justify-center rounded-full transition-transform active:scale-95"
+              style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", boxShadow: "0 2px 6px rgba(180,36,90,0.3), 0 1px 3px rgba(0,0,0,0.1)" }}
             >
               <Icon name="favorite" filled size={24} />
             </button>
@@ -845,7 +856,7 @@ export default function Home() {
 
         {/* Swipe hint — only on first name ever */}
         {ratedCount === 0 && currentName && !isDone && (
-          <p className="text-center text-[12px] leading-[16px] pb-4 -mt-1" style={{ color: "var(--md-outline)", fontFamily: "var(--font-body)" }}>
+          <p className="text-center text-[12px] leading-[16px] pb-5 -mt-2 shrink-0" style={{ color: "var(--md-outline)", fontFamily: "var(--font-body)" }}>
             Swipe right to love, left to pass, up for maybe
           </p>
         )}
@@ -885,7 +896,7 @@ export default function Home() {
     };
 
     return (
-      <div className="min-h-dvh flex flex-col" style={{ background: "var(--md-surface-container-low)" }}>
+      <div className="min-h-dvh flex flex-col mx-auto" style={{ background: "var(--md-surface-container-low)", maxWidth: 430 }}>
         <TopBar
           title="Shortlist"
           leading={<IconButton icon="arrow_back" onClick={() => setView("rate")} />}
@@ -981,7 +992,7 @@ export default function Home() {
     const hasMatches = compareData && (compareData.bothLoved.length > 0 || compareData.oneLovedOneMaybe.length > 0 || compareData.bothMaybe.length > 0);
 
     return (
-      <div className="min-h-dvh flex flex-col" style={{ background: "var(--md-surface-container-low)" }}>
+      <div className="min-h-dvh flex flex-col mx-auto" style={{ background: "var(--md-surface-container-low)", maxWidth: 430 }}>
         <TopBar
           title="Compare"
           leading={<IconButton icon="arrow_back" onClick={() => setView("rate")} />}
@@ -1045,7 +1056,7 @@ export default function Home() {
     );
 
     return (
-      <div className="min-h-dvh flex flex-col" style={{ background: "var(--md-surface-container-low)" }}>
+      <div className="min-h-dvh flex flex-col mx-auto" style={{ background: "var(--md-surface-container-low)", maxWidth: 430 }}>
         <TopBar
           title="Add a name"
           leading={<IconButton icon="arrow_back" onClick={() => setView("rate")} />}
@@ -1080,7 +1091,7 @@ export default function Home() {
     const candidates = [...loves, ...maybes];
 
     return (
-      <div className="min-h-dvh flex flex-col" style={{ background: "var(--md-surface-container-low)" }}>
+      <div className="min-h-dvh flex flex-col mx-auto" style={{ background: "var(--md-surface-container-low)", maxWidth: 430 }}>
         <TopBar
           title="Pick first names"
           leading={<IconButton icon="arrow_back" onClick={() => setView("rate")} />}
@@ -1187,7 +1198,7 @@ export default function Home() {
     const currentMiddleData = middleNameList.find(m => m.name === currentMiddle);
 
     return (
-      <div className="flex flex-col min-h-dvh" style={{ background: "var(--md-surface-container-low)" }}>
+      <div className="flex flex-col min-h-dvh mx-auto" style={{ background: "var(--md-surface-container-low)", maxWidth: 430 }}>
         <TopBar
           title="Middle names"
           leading={<IconButton icon="arrow_back" onClick={() => setView("rate")} />}
@@ -1321,25 +1332,25 @@ export default function Home() {
 
         {/* Rating FABs */}
         {!isDone && currentMiddle && (
-          <div className="flex items-center justify-center gap-6 py-5">
+          <div className="flex items-center justify-center gap-5 py-4 shrink-0">
             <button
               onClick={() => rateMiddleName(currentMiddle, "pass", "left")}
-              className="state-layer w-14 h-14 flex items-center justify-center rounded-2xl elevation-2 transition-transform active:scale-95"
-              style={{ color: "var(--md-on-surface-variant)" }}
+              className="state-layer w-14 h-14 flex items-center justify-center rounded-full transition-transform active:scale-95"
+              style={{ background: "var(--md-surface-container-highest)", color: "var(--md-on-surface-variant)", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }}
             >
               <Icon name="close" size={24} />
             </button>
             <button
               onClick={() => rateMiddleName(currentMiddle, "maybe", "up")}
-              className="state-layer w-12 h-12 flex items-center justify-center rounded-xl elevation-1 transition-transform active:scale-95"
-              style={{ background: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)" }}
+              className="state-layer w-12 h-12 flex items-center justify-center rounded-full transition-transform active:scale-95"
+              style={{ background: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)", boxShadow: "0 1px 2px rgba(0,0,0,0.08)" }}
             >
-              <Icon name="help" size={24} />
+              <Icon name="help" size={22} />
             </button>
             <button
               onClick={() => rateMiddleName(currentMiddle, "love", "right")}
-              className="state-layer w-14 h-14 flex items-center justify-center rounded-2xl transition-transform active:scale-95"
-              style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 4px 8px rgba(180,36,90,0.25)" }}
+              className="state-layer w-14 h-14 flex items-center justify-center rounded-full transition-transform active:scale-95"
+              style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", boxShadow: "0 2px 6px rgba(180,36,90,0.3), 0 1px 3px rgba(0,0,0,0.1)" }}
             >
               <Icon name="favorite" filled size={24} />
             </button>
@@ -1395,7 +1406,7 @@ export default function Home() {
     );
 
     return (
-      <div className="min-h-dvh flex flex-col" style={{ background: "var(--md-surface-container-low)" }}>
+      <div className="min-h-dvh flex flex-col mx-auto" style={{ background: "var(--md-surface-container-low)", maxWidth: 430 }}>
         <TopBar
           title="Final pairings"
           leading={<IconButton icon="arrow_back" onClick={() => setView("rateMiddle")} />}
