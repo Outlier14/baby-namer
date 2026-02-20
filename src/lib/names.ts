@@ -294,3 +294,85 @@ const uniqueNames = names.filter((name, index, self) =>
 );
 
 export default uniqueNames;
+
+// ===== MIDDLE NAMES =====
+export interface MiddleName {
+  name: string;
+  origin: string;
+  meaning: string;
+  syllables: number;
+}
+
+export const middleNames: MiddleName[] = [
+  // 1-syllable classics
+  { name: "Rose", origin: "English", meaning: "Rose flower", syllables: 1 },
+  { name: "Grace", origin: "English", meaning: "Elegance, goodness", syllables: 1 },
+  { name: "Mae", origin: "English", meaning: "Month of May", syllables: 1 },
+  { name: "Jane", origin: "English", meaning: "God is gracious", syllables: 1 },
+  { name: "Claire", origin: "French", meaning: "Clear, bright", syllables: 1 },
+  { name: "Faith", origin: "English", meaning: "Trust, belief", syllables: 1 },
+  { name: "Hope", origin: "English", meaning: "Expectation, hope", syllables: 1 },
+  { name: "Joy", origin: "English", meaning: "Happiness, delight", syllables: 1 },
+  { name: "Eve", origin: "Hebrew", meaning: "Living, life", syllables: 1 },
+  { name: "Faye", origin: "English", meaning: "Fairy, loyalty", syllables: 1 },
+  { name: "Pearl", origin: "English", meaning: "Precious gem", syllables: 1 },
+  { name: "Wren", origin: "English", meaning: "Small songbird", syllables: 1 },
+  { name: "Sage", origin: "English", meaning: "Wise, herb", syllables: 1 },
+  { name: "Brooke", origin: "English", meaning: "Small stream", syllables: 1 },
+  { name: "Paige", origin: "English", meaning: "Young attendant", syllables: 1 },
+  { name: "Blythe", origin: "English", meaning: "Happy, carefree", syllables: 1 },
+  { name: "Quinn", origin: "Irish", meaning: "Wisdom, chief", syllables: 1 },
+  { name: "Reese", origin: "Welsh", meaning: "Ardor, passion", syllables: 1 },
+  { name: "Sloane", origin: "Irish", meaning: "Raider, warrior", syllables: 1 },
+  { name: "Neve", origin: "Irish", meaning: "Bright, radiant", syllables: 1 },
+  { name: "Lark", origin: "English", meaning: "Songbird", syllables: 1 },
+  { name: "Rue", origin: "French", meaning: "Street; herb of grace", syllables: 1 },
+  { name: "Belle", origin: "French", meaning: "Beautiful", syllables: 1 },
+
+  // 2-syllable classics
+  { name: "Marie", origin: "French", meaning: "Beloved, star of the sea", syllables: 2 },
+  { name: "Elise", origin: "French", meaning: "Pledged to God", syllables: 2 },
+  { name: "Louise", origin: "French", meaning: "Famous warrior", syllables: 2 },
+  { name: "Renee", origin: "French", meaning: "Reborn", syllables: 2 },
+  { name: "Nicole", origin: "French", meaning: "Victory of the people", syllables: 2 },
+  { name: "Noelle", origin: "French", meaning: "Christmas", syllables: 2 },
+  { name: "Camille", origin: "French", meaning: "Perfect, noble", syllables: 2 },
+  { name: "Colette", origin: "French", meaning: "Victory of the people", syllables: 2 },
+  { name: "Violet", origin: "English", meaning: "Purple flower", syllables: 2 },
+  { name: "Harper", origin: "English", meaning: "Harp player", syllables: 2 },
+  { name: "Hazel", origin: "English", meaning: "Hazel tree", syllables: 2 },
+  { name: "Ivy", origin: "English", meaning: "Climbing vine", syllables: 2 },
+  { name: "Luna", origin: "Latin", meaning: "Moon", syllables: 2 },
+  { name: "Stella", origin: "Latin", meaning: "Star", syllables: 2 },
+  { name: "Lily", origin: "English", meaning: "Lily flower, purity", syllables: 2 },
+  { name: "Ruby", origin: "English", meaning: "Red precious stone", syllables: 2 },
+  { name: "Ember", origin: "English", meaning: "Glowing coal", syllables: 2 },
+  { name: "Autumn", origin: "English", meaning: "Fall season", syllables: 2 },
+  { name: "Willow", origin: "English", meaning: "Willow tree", syllables: 2 },
+
+  // Heritage middle names — Ukrainian/Slavic
+  { name: "Nadia", origin: "Ukrainian/Slavic", meaning: "Hope", syllables: 2 },
+  { name: "Vera", origin: "Ukrainian/Slavic", meaning: "Faith, truth", syllables: 2 },
+  { name: "Mira", origin: "Slavic", meaning: "Peace, wonderful", syllables: 2 },
+  { name: "Zora", origin: "Slavic", meaning: "Dawn, aurora", syllables: 2 },
+  { name: "Lara", origin: "Slavic", meaning: "Protection, cheerful", syllables: 2 },
+  { name: "Nika", origin: "Ukrainian/Greek", meaning: "Victory", syllables: 2 },
+  { name: "Dasha", origin: "Ukrainian/Slavic", meaning: "Gift of God", syllables: 2 },
+
+  // 3-syllable elegant
+  { name: "Elizabeth", origin: "Hebrew/English", meaning: "Pledged to God", syllables: 4 },
+  { name: "Anastasia", origin: "Greek/Slavic", meaning: "Resurrection", syllables: 4 },
+  { name: "Genevieve", origin: "French", meaning: "Woman of the people", syllables: 3 },
+  { name: "Vivienne", origin: "French", meaning: "Full of life", syllables: 3 },
+  { name: "Juliette", origin: "French", meaning: "Youthful", syllables: 3 },
+  { name: "Catherine", origin: "French/Greek", meaning: "Pure", syllables: 3 },
+  { name: "Valentina", origin: "Latin/Slavic", meaning: "Strong, healthy", syllables: 4 },
+  { name: "Seraphina", origin: "Hebrew", meaning: "Fiery, burning ones", syllables: 4 },
+  { name: "Evangeline", origin: "Greek", meaning: "Bearer of good news", syllables: 4 },
+  { name: "Madeline", origin: "French", meaning: "High tower", syllables: 3 },
+  { name: "Caroline", origin: "French/German", meaning: "Free woman", syllables: 3 },
+  { name: "Josephine", origin: "French", meaning: "God will increase", syllables: 3 },
+  { name: "Adelaide", origin: "German", meaning: "Noble natured", syllables: 3 },
+  { name: "Celeste", origin: "Latin", meaning: "Heavenly", syllables: 2 },
+  { name: "Aurora", origin: "Latin", meaning: "Dawn", syllables: 3 },
+];

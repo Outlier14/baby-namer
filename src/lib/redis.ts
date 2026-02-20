@@ -24,6 +24,15 @@ export interface UserProgress {
   }>;
   personalizationEnabled: boolean;
   lastUpdated: number;
+  // Tutorial
+  hasSeenTutorial?: boolean;
+  // Middle name phase
+  phase?: "first" | "middle";
+  topFirstNames?: string[];
+  middleNameRatings?: Record<string, Record<string, Rating>>; // { "Sophia": { "Rose": "love" } }
+  middleNameOrder?: string[];
+  middleNameIndex?: number;
+  activeFirstName?: string | null;
 }
 
 export const defaultProgress = (nameOrder: string[]): UserProgress => ({

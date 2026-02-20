@@ -222,3 +222,19 @@ body {
   border-radius: 100px;
   transition: width 0.4s cubic-bezier(0.2, 0, 0, 1);
 }
+
+/* ===== Tutorial dialog enter ===== */
+.tutorial-enter {
+  animation: tutorialEnter 0.4s cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes tutorialEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.85) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

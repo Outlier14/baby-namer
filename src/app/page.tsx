@@ -2,16 +2,25 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { BabyName } from "@/lib/names";
+import type { MiddleName } from "@/lib/names";
 import type { UserProgress, Rating } from "@/lib/redis";
 
-type View = "welcome" | "rate" | "shortlist" | "compare" | "addName";
+type View = "welcome" | "rate" | "shortlist" | "compare" | "addName" | "pickFirstNames" | "rateMiddle" | "pairings";
 
 let allNamesCache: BabyName[] | null = null;
+let middleNamesCache: MiddleName[] | null = null;
 async function loadNames(): Promise<BabyName[]> {
   if (allNamesCache) return allNamesCache;
   const mod = await import("@/lib/names");
   allNamesCache = mod.default;
+  middleNamesCache = mod.middleNames;
   return allNamesCache;
+}
+async function loadMiddleNames(): Promise<MiddleName[]> {
+  if (middleNamesCache) return middleNamesCache;
+  const mod = await import("@/lib/names");
+  middleNamesCache = mod.middleNames;
+  return middleNamesCache;
 }
 
 // Material icon helper
@@ -50,10 +59,10 @@ function renderNameLetters(name: string) {
   return <span>{name}</span>;
 }
 
-function speak(name: string) {
+function speak(text: string) {
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(name);
+    const utter = new SpeechSynthesisUtterance(text);
     utter.rate = 0.9;
     utter.pitch = 1.0;
     window.speechSynthesis.speak(utter);
@@ -70,6 +79,93 @@ function loadLocal(key: string): UserProgress | null {
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
 }
+function getTutorialSeen(user: string): boolean {
+  try { return localStorage.getItem(`babynamer_tutorial_${user}`) === "true"; } catch { return false; }
+}
+function setTutorialSeen(user: string) {
+  try { localStorage.setItem(`babynamer_tutorial_${user}`, "true"); } catch { /* */ }
+}
+
+// ===== TUTORIAL COMPONENT =====
+function Tutorial({ onComplete }: { onComplete: () => void }) {
+  const [step, setStep] = useState(0);
+  const steps = [
+    {
+      icon: "swipe",
+      title: "Swipe to rate",
+      desc: "Swipe right to love a name, left to pass, or up for maybe. You can also use the buttons below the card.",
+    },
+    {
+      icon: "favorite",
+      title: "Three choices",
+      desc: "Love it — add to your shortlist. Maybe — keep it as a backup. Pass — move on to the next name.",
+    },
+    {
+      icon: "bar_chart",
+      title: "Track progress",
+      desc: "Watch your stats and progress bar as you go. See how many you've loved, maybe'd, and how many are left.",
+    },
+    {
+      icon: "compare",
+      title: "Compare together",
+      desc: "Open the menu to see your shortlist or compare picks with your partner. Find names you both love!",
+    },
+  ];
+  const s = steps[step];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
+      <div
+        className="w-[320px] rounded-[28px] p-8 text-center tutorial-enter"
+        style={{ background: "var(--md-surface-container-highest)" }}
+      >
+        <div
+          className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"
+          style={{ background: "var(--md-primary-container)" }}
+        >
+          <Icon name={s.icon} filled size={32} style={{ color: "var(--md-on-primary-container)" }} />
+        </div>
+        <h3 className="text-[22px] font-medium mb-3" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface)" }}>
+          {s.title}
+        </h3>
+        <p className="text-[14px] leading-[20px] mb-8" style={{ fontFamily: "var(--font-body)", color: "var(--md-on-surface-variant)" }}>
+          {s.desc}
+        </p>
+        {/* Step dots */}
+        <div className="flex items-center justify-center gap-2 mb-6">
+          {steps.map((_, i) => (
+            <div
+              key={i}
+              className="rounded-full transition-all"
+              style={{
+                width: i === step ? 24 : 8,
+                height: 8,
+                background: i === step ? "var(--md-primary)" : "var(--md-outline-variant)",
+              }}
+            />
+          ))}
+        </div>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={onComplete}
+            className="h-10 px-3 rounded-full text-[14px] font-medium"
+            style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}
+          >
+            Skip
+          </button>
+          <button
+            onClick={() => isLast ? onComplete() : setStep(step + 1)}
+            className="state-layer h-10 px-6 rounded-full text-[14px] font-medium"
+            style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", fontFamily: "var(--font-display)" }}
+          >
+            {isLast ? "Got it!" : "Next"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const [view, setView] = useState<View>("welcome");
@@ -77,6 +173,7 @@ export default function Home() {
   const [progress, setProgress] = useState<UserProgress | null>(null);
   const [, setAllNames] = useState<BabyName[]>([]);
   const [nameMap, setNameMap] = useState<Map<string, BabyName>>(new Map());
+  const [middleNameList, setMiddleNameList] = useState<MiddleName[]>([]);
   const [loading, setLoading] = useState(false);
   const [swipeClass, setSwipeClass] = useState("");
   const [compareData, setCompareData] = useState<{
@@ -91,6 +188,10 @@ export default function Home() {
   });
   const [menuOpen, setMenuOpen] = useState(false);
   const [snackbar, setSnackbar] = useState<string | null>(null);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [similarOpen, setSimilarOpen] = useState(false);
+  // Middle name picking
+  const [selectedFirstNames, setSelectedFirstNames] = useState<Set<string>>(new Set());
 
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -100,6 +201,7 @@ export default function Home() {
       setAllNames(n);
       setNameMap(new Map(n.map((name) => [name.name, name])));
     });
+    loadMiddleNames().then((m) => setMiddleNameList(m));
   }, []);
 
   const showSnackbar = (msg: string) => {
@@ -109,14 +211,16 @@ export default function Home() {
 
   const selectUser = async (u: string) => {
     setLoading(true);
-    // Try localStorage first (instant, always works)
     const local = loadLocal(u);
     if (local) {
       setUser(u);
       setProgress(local);
+      // Check tutorial
+      if (!getTutorialSeen(u)) {
+        setShowTutorial(true);
+      }
       setView("rate");
       setLoading(false);
-      // Try to sync from server in background (non-blocking)
       fetch(`/api/user?user=${u}`).then(r => r.json()).then(data => {
         if (data && data.lastUpdated > local.lastUpdated) {
           setProgress(data);
@@ -125,13 +229,13 @@ export default function Home() {
       }).catch(() => {});
       return;
     }
-    // No local data — try server, then create fresh
     try {
       const res = await fetch(`/api/user?user=${u}`);
       const data = await res.json();
       setUser(u);
       setProgress(data);
       saveLocal(u, data);
+      if (!getTutorialSeen(u)) setShowTutorial(true);
       setView("rate");
     } catch {
       const names = await loadNames();
@@ -139,13 +243,20 @@ export default function Home() {
       const fresh: UserProgress = {
         currentIndex: 0, nameOrder: shuffled, ratings: {},
         customNames: [], personalizationEnabled: false, lastUpdated: Date.now(),
+        hasSeenTutorial: false, phase: "first",
       };
       setUser(u);
       setProgress(fresh);
       saveLocal(u, fresh);
+      if (!getTutorialSeen(u)) setShowTutorial(true);
       setView("rate");
     }
     setLoading(false);
+  };
+
+  const completeTutorial = () => {
+    setShowTutorial(false);
+    if (user) setTutorialSeen(user);
   };
 
   const saveProgress = useCallback(async (updatedProgress: UserProgress) => {
@@ -158,7 +269,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user, progress: updatedProgress }),
       });
-    } catch { /* offline — localStorage has it */ }
+    } catch { /* offline */ }
   }, [user]);
 
   const currentName = progress ? progress.nameOrder[progress.currentIndex] : null;
@@ -169,6 +280,7 @@ export default function Home() {
   const rateName = useCallback(async (rating: Rating, direction: "left" | "right" | "up") => {
     if (!progress || !currentName || !user) return;
     setLastRatedName(currentName);
+    setSimilarOpen(false);
     if (direction === "left") setSwipeClass("swipe-left");
     else if (direction === "right") setSwipeClass("swipe-right");
     else setSwipeClass("swipe-up");
@@ -208,6 +320,32 @@ export default function Home() {
     }, 300);
   }, [progress, currentName, user, saveProgress]);
 
+  // Middle name rating
+  const rateMiddleName = useCallback(async (middleName: string, rating: Rating, direction: "left" | "right" | "up") => {
+    if (!progress || !user || !progress.activeFirstName) return;
+    const firstName = progress.activeFirstName;
+
+    if (direction === "left") setSwipeClass("swipe-left");
+    else if (direction === "right") setSwipeClass("swipe-right");
+    else setSwipeClass("swipe-up");
+
+    setTimeout(async () => {
+      setSwipeClass("");
+      const currentMiddleRatings = progress.middleNameRatings || {};
+      const firstNameRatings = currentMiddleRatings[firstName] || {};
+      const updatedFirstNameRatings = { ...firstNameRatings, [middleName]: rating };
+      const updatedMiddleRatings = { ...currentMiddleRatings, [firstName]: updatedFirstNameRatings };
+      const newIndex = (progress.middleNameIndex || 0) + 1;
+      const updated = {
+        ...progress,
+        middleNameRatings: updatedMiddleRatings,
+        middleNameIndex: newIndex,
+        lastUpdated: Date.now(),
+      };
+      await saveProgress(updated);
+    }, 300);
+  }, [progress, user, saveProgress]);
+
   const undoLastRating = useCallback(async () => {
     if (!progress || !lastRatedName || !user) return;
     const newRatings = { ...progress.ratings };
@@ -234,10 +372,22 @@ export default function Home() {
     const dx = e.changedTouches[0].clientX - touchStart.current.x;
     const dy = e.changedTouches[0].clientY - touchStart.current.y;
     if (Math.abs(dx) < 50 && Math.abs(dy) < 50) { touchStart.current = null; return; }
-    if (Math.abs(dy) > Math.abs(dx) && dy < -50) rateName("maybe", "up");
-    else if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 50) rateName("love", "right");
-      else if (dx < -50) rateName("pass", "left");
+    if (view === "rateMiddle") {
+      const middleOrder = progress?.middleNameOrder || [];
+      const middleIdx = progress?.middleNameIndex || 0;
+      const currentMiddle = middleOrder[middleIdx];
+      if (!currentMiddle) { touchStart.current = null; return; }
+      if (Math.abs(dy) > Math.abs(dx) && dy < -50) rateMiddleName(currentMiddle, "maybe", "up");
+      else if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 50) rateMiddleName(currentMiddle, "love", "right");
+        else if (dx < -50) rateMiddleName(currentMiddle, "pass", "left");
+      }
+    } else {
+      if (Math.abs(dy) > Math.abs(dx) && dy < -50) rateName("maybe", "up");
+      else if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 50) rateName("love", "right");
+        else if (dx < -50) rateName("pass", "left");
+      }
     }
     touchStart.current = null;
   };
@@ -280,7 +430,6 @@ export default function Home() {
       const data = await res.json();
       setCompareData(data);
     } catch {
-      // Fallback: compare from localStorage
       const nickData = loadLocal("nick");
       const nickiData = loadLocal("nicki");
       if (nickData && nickiData) {
@@ -319,7 +468,6 @@ export default function Home() {
     };
     setProgress(updated);
     saveLocal(user, updated);
-    // Try API sync in background
     fetch("/api/names", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -335,22 +483,54 @@ export default function Home() {
     setView("rate");
   };
 
+  // Start middle name phase
+  const startMiddleNamePhase = async () => {
+    if (!progress || !user) return;
+    const selected = Array.from(selectedFirstNames);
+    if (selected.length === 0) return;
+    const shuffledMiddles = [...middleNameList.map(m => m.name)].sort(() => Math.random() - 0.5);
+    const updated: UserProgress = {
+      ...progress,
+      phase: "middle",
+      topFirstNames: selected,
+      middleNameOrder: shuffledMiddles,
+      middleNameIndex: 0,
+      middleNameRatings: {},
+      activeFirstName: selected[0],
+      lastUpdated: Date.now(),
+    };
+    await saveProgress(updated);
+    setView("rateMiddle");
+  };
+
+  // Switch active first name for middle name rating
+  const switchActiveFirstName = async (firstName: string) => {
+    if (!progress || !user) return;
+    const updated = {
+      ...progress,
+      activeFirstName: firstName,
+      middleNameIndex: 0,
+      lastUpdated: Date.now(),
+    };
+    await saveProgress(updated);
+  };
+
   const totalNames = progress?.nameOrder.length || 0;
   const ratedCount = progress ? Object.keys(progress.ratings).length : 0;
   const loveCount = progress ? Object.values(progress.ratings).filter((r) => r === "love").length : 0;
   const maybeCount = progress ? Object.values(progress.ratings).filter((r) => r === "maybe").length : 0;
   const remaining = totalNames - ratedCount;
 
-  // ===== M3 Top App Bar =====
+  // ===== M3 Top App Bar ===== (M3 spec: 64px height, 16px horizontal padding)
   const TopBar = ({ title, leading, trailing }: { title: string; leading?: React.ReactNode; trailing?: React.ReactNode }) => (
-    <div className="flex items-center h-16 px-1" style={{ background: "var(--md-surface-container-low)" }}>
-      <div className="w-12 flex items-center justify-center">{leading}</div>
-      <h1 className="flex-1 text-[22px] font-normal" style={{ fontFamily: "var(--font-display)" }}>{title}</h1>
-      <div className="flex items-center gap-1">{trailing}</div>
+    <div className="flex items-center h-16 px-4" style={{ background: "var(--md-surface-container-low)" }}>
+      <div className="w-12 h-12 flex items-center justify-center shrink-0">{leading}</div>
+      <h1 className="flex-1 text-[22px] font-normal ml-1" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface)" }}>{title}</h1>
+      <div className="flex items-center">{trailing}</div>
     </div>
   );
 
-  // ===== M3 Icon Button =====
+  // ===== M3 Icon Button ===== (M3 spec: 48px touch target, 40px visible, centered icon)
   const IconButton = ({ icon, onClick, label, filled }: { icon: string; onClick: () => void; label?: string; filled?: boolean }) => (
     <button
       onClick={onClick}
@@ -358,7 +538,7 @@ export default function Home() {
       className="state-layer w-12 h-12 flex items-center justify-center rounded-full"
       style={{ color: "var(--md-on-surface-variant)" }}
     >
-      <Icon name={icon} filled={filled} />
+      <Icon name={icon} filled={filled} size={24} />
     </button>
   );
 
@@ -366,7 +546,7 @@ export default function Home() {
   const Snackbar = () => snackbar ? (
     <div
       className="fixed bottom-6 left-4 right-4 z-50 flex items-center px-4 py-3 rounded-[4px] elevation-3"
-      style={{ background: "var(--md-on-surface)", color: "var(--md-surface)", maxWidth: 400, margin: "0 auto", fontFamily: "var(--font-body)", fontSize: 14 }}
+      style={{ background: "var(--md-on-surface)", color: "var(--md-surface)", maxWidth: 400, margin: "0 auto", fontFamily: "var(--font-body)", fontSize: 14, lineHeight: "20px" }}
     >
       {snackbar}
     </div>
@@ -378,20 +558,20 @@ export default function Home() {
       <div className="flex flex-col items-center justify-center min-h-dvh px-6" style={{ background: "var(--md-surface)" }}>
         <div className="text-center mb-16">
           <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: "var(--md-primary-container)" }}>
-            <Icon name="favorite" filled size={36} className="" style={{ color: "var(--md-on-primary-container)" } as React.CSSProperties} />
+            <Icon name="favorite" filled size={36} style={{ color: "var(--md-on-primary-container)" }} />
           </div>
           <h1 className="text-[32px] font-normal mb-2" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface)" }}>
             Baby Namer
           </h1>
-          <p className="text-sm" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+          <p className="text-[14px] leading-[20px]" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
             Find her perfect name together
           </p>
         </div>
-        <div className="flex flex-col gap-3 w-full max-w-[280px]">
+        <div className="flex flex-col gap-3 w-full max-w-[312px]">
           <button
             onClick={() => selectUser("nick")}
             disabled={loading}
-            className="state-layer w-full h-14 rounded-full text-base font-medium transition-all active:scale-[0.98]"
+            className="state-layer w-full h-[56px] rounded-full text-[14px] font-medium tracking-[0.1px] transition-all active:scale-[0.98]"
             style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", fontFamily: "var(--font-display)" }}
           >
             {loading ? "Loading..." : "I'm Nick"}
@@ -399,7 +579,7 @@ export default function Home() {
           <button
             onClick={() => selectUser("nicki")}
             disabled={loading}
-            className="state-layer w-full h-14 rounded-full text-base font-medium border transition-all active:scale-[0.98]"
+            className="state-layer w-full h-[56px] rounded-full text-[14px] font-medium tracking-[0.1px] border transition-all active:scale-[0.98]"
             style={{ background: "transparent", color: "var(--md-primary)", borderColor: "var(--md-outline)", fontFamily: "var(--font-display)" }}
           >
             {loading ? "Loading..." : "I'm Nicki"}
@@ -416,40 +596,34 @@ export default function Home() {
 
     return (
       <div className="flex flex-col min-h-dvh" style={{ background: "var(--md-surface-container-low)" }}>
+        {showTutorial && <Tutorial onComplete={completeTutorial} />}
+
         {/* Top bar */}
         <TopBar
           title={user === "nick" ? "Nick" : "Nicki"}
-          leading={
-            <IconButton icon="menu" onClick={() => setMenuOpen(!menuOpen)} />
-          }
-          trailing={
-            <>
-              {lastRatedName && (
-                <IconButton icon="undo" onClick={undoLastRating} label="Undo" />
-              )}
-            </>
-          }
+          leading={<IconButton icon="menu" onClick={() => setMenuOpen(!menuOpen)} />}
+          trailing={lastRatedName ? <IconButton icon="undo" onClick={undoLastRating} label="Undo" /> : undefined}
         />
 
-        {/* Stats chips */}
-        <div className="flex items-center gap-2 px-4 pb-2">
-          <div className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium" style={{ background: "var(--md-surface-container)", color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
-            <Icon name="check_circle" size={16} />
+        {/* Stats chips — M3 spec: 32px chip height, 8px gap, 16px horizontal padding */}
+        <div className="flex items-center gap-2 px-4 pb-3 pt-1">
+          <div className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[12px] font-medium leading-[16px]" style={{ background: "var(--md-surface-container)", color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+            <Icon name="check_circle" size={18} />
             {ratedCount}
           </div>
-          <div className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium" style={{ background: "var(--md-primary-container)", color: "var(--md-on-primary-container)", fontFamily: "var(--font-body)" }}>
-            <Icon name="favorite" filled size={16} />
+          <div className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[12px] font-medium leading-[16px]" style={{ background: "var(--md-primary-container)", color: "var(--md-on-primary-container)", fontFamily: "var(--font-body)" }}>
+            <Icon name="favorite" filled size={18} />
             {loveCount}
           </div>
-          <div className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium" style={{ background: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)", fontFamily: "var(--font-body)" }}>
-            <Icon name="help" size={16} />
+          <div className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[12px] font-medium leading-[16px]" style={{ background: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)", fontFamily: "var(--font-body)" }}>
+            <Icon name="help" size={18} />
             {maybeCount}
           </div>
-          <span className="ml-auto text-xs" style={{ color: "var(--md-on-surface-variant)" }}>{remaining} left</span>
+          <span className="ml-auto text-[12px] leading-[16px]" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>{remaining} left</span>
         </div>
 
-        {/* Progress */}
-        <div className="px-4 mb-3">
+        {/* Progress — M3 spec: 4px track height */}
+        <div className="px-4 mb-4">
           <div className="progress-track">
             <div className="progress-indicator" style={{ width: `${totalNames > 0 ? (ratedCount / totalNames) * 100 : 0}%` }} />
           </div>
@@ -457,32 +631,38 @@ export default function Home() {
 
         {/* Personalization banner */}
         {personalizationBanner && (
-          <div className="mx-4 mb-3 flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: "var(--md-primary-container)", color: "var(--md-on-primary-container)" }}>
+          <div className="mx-4 mb-4 flex items-center gap-4 px-4 py-3 rounded-[12px]" style={{ background: "var(--md-primary-container)", color: "var(--md-on-primary-container)" }}>
             <Icon name="auto_awesome" size={20} />
-            <span className="text-sm" style={{ fontFamily: "var(--font-body)" }}>Names personalized based on your taste</span>
+            <span className="text-[14px] leading-[20px]" style={{ fontFamily: "var(--font-body)" }}>Names personalized based on your taste</span>
           </div>
         )}
 
-        {/* Menu */}
+        {/* Navigation Menu — M3 spec: 360px max width, 256px min, 56px item height */}
         {menuOpen && (
           <>
             <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setMenuOpen(false)} />
             <div className="fixed top-0 left-0 bottom-0 w-[280px] z-50 elevation-3 flex flex-col" style={{ background: "var(--md-surface-container-low)" }}>
-              <div className="h-16 flex items-center px-4">
-                <h2 className="text-base font-medium" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface-variant)" }}>Baby Namer</h2>
+              <div className="h-16 flex items-center px-7">
+                <h2 className="text-[14px] font-medium tracking-[0.1px]" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface-variant)" }}>Baby Namer</h2>
               </div>
               <div className="px-3">
-                <button onClick={() => { setMenuOpen(false); setView("shortlist"); }} className="state-layer w-full flex items-center gap-3 h-14 px-4 rounded-full text-sm font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+                <button onClick={() => { setMenuOpen(false); setView("shortlist"); }} className="state-layer w-full flex items-center gap-3 h-14 px-4 rounded-full text-[14px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                   <Icon name="favorite" size={24} /> My Shortlist
                 </button>
-                <button onClick={() => { setMenuOpen(false); loadCompare(); }} className="state-layer w-full flex items-center gap-3 h-14 px-4 rounded-full text-sm font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+                <button onClick={() => { setMenuOpen(false); loadCompare(); }} className="state-layer w-full flex items-center gap-3 h-14 px-4 rounded-full text-[14px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                   <Icon name="compare" size={24} /> Compare
                 </button>
-                <button onClick={() => { setMenuOpen(false); setView("addName"); }} className="state-layer w-full flex items-center gap-3 h-14 px-4 rounded-full text-sm font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+                <button onClick={() => { setMenuOpen(false); setView("addName"); }} className="state-layer w-full flex items-center gap-3 h-14 px-4 rounded-full text-[14px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                   <Icon name="add_circle" size={24} /> Add a Name
                 </button>
+                {/* Middle name option — only if user has some loved names */}
+                {loveCount >= 2 && (
+                  <button onClick={() => { setMenuOpen(false); setView("pickFirstNames"); }} className="state-layer w-full flex items-center gap-3 h-14 px-4 rounded-full text-[14px] font-medium" style={{ color: "var(--md-primary)", fontFamily: "var(--font-body)" }}>
+                    <Icon name="child_care" size={24} /> Pick Middle Names
+                  </button>
+                )}
                 <div className="my-2 mx-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }} />
-                <button onClick={() => { setMenuOpen(false); setUser(null); setProgress(null); setView("welcome"); }} className="state-layer w-full flex items-center gap-3 h-14 px-4 rounded-full text-sm font-medium" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+                <button onClick={() => { setMenuOpen(false); setUser(null); setProgress(null); setView("welcome"); }} className="state-layer w-full flex items-center gap-3 h-14 px-4 rounded-full text-[14px] font-medium" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
                   <Icon name="swap_horiz" size={24} /> Switch User
                 </button>
               </div>
@@ -495,44 +675,49 @@ export default function Home() {
           {isDone ? (
             <div className="text-center px-6">
               <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: "var(--md-primary-container)" }}>
-                <Icon name="celebration" filled size={32} className="" style={{ color: "var(--md-on-primary-container)" } as React.CSSProperties} />
+                <Icon name="celebration" filled size={32} style={{ color: "var(--md-on-primary-container)" }} />
               </div>
-              <h2 className="text-2xl font-normal mb-2" style={{ fontFamily: "var(--font-display)" }}>All done!</h2>
-              <p className="text-sm mb-8" style={{ color: "var(--md-on-surface-variant)" }}>
+              <h2 className="text-[24px] font-normal mb-2" style={{ fontFamily: "var(--font-display)" }}>All done!</h2>
+              <p className="text-[14px] leading-[20px] mb-8" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
                 You&apos;ve rated all {totalNames} names
               </p>
-              <div className="flex flex-col gap-3 w-full max-w-[260px] mx-auto">
-                <button onClick={() => setView("shortlist")} className="state-layer h-12 rounded-full text-sm font-medium" style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", fontFamily: "var(--font-display)" }}>
+              <div className="flex flex-col gap-3 w-full max-w-[280px] mx-auto">
+                <button onClick={() => setView("shortlist")} className="state-layer h-[40px] rounded-full text-[14px] font-medium tracking-[0.1px]" style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", fontFamily: "var(--font-display)" }}>
                   View Shortlist
                 </button>
-                <button onClick={loadCompare} className="state-layer h-12 rounded-full text-sm font-medium border" style={{ color: "var(--md-primary)", borderColor: "var(--md-outline)", fontFamily: "var(--font-display)" }}>
+                <button onClick={loadCompare} className="state-layer h-[40px] rounded-full text-[14px] font-medium tracking-[0.1px] border" style={{ color: "var(--md-primary)", borderColor: "var(--md-outline)", fontFamily: "var(--font-display)" }}>
                   Compare with Partner
                 </button>
+                {loveCount >= 2 && (
+                  <button onClick={() => setView("pickFirstNames")} className="state-layer h-[40px] rounded-full text-[14px] font-medium tracking-[0.1px] border" style={{ color: "var(--md-primary)", borderColor: "var(--md-primary)", fontFamily: "var(--font-display)" }}>
+                    Pick Middle Names
+                  </button>
+                )}
               </div>
             </div>
           ) : currentName ? (
             <div
               ref={cardRef}
-              className={`w-full max-w-sm rounded-3xl overflow-hidden ${swipeClass || "card-enter"}`}
+              className={`w-full max-w-sm rounded-[28px] overflow-hidden ${swipeClass || "card-enter"}`}
               style={{ background: "var(--md-surface-container-lowest)", boxShadow: "0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05)" }}
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
             >
-              {/* Header section */}
-              <div className="px-6 pt-6 pb-4 text-center" style={{ background: "var(--md-surface-container-lowest)" }}>
-                <h2 className="text-[36px] font-medium mb-1" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.5px" }}>
+              {/* Header section — M3 card: 16-24px padding */}
+              <div className="px-6 pt-6 pb-4 text-center">
+                <h2 className="text-[36px] font-medium mb-1" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.5px", color: "var(--md-on-surface)" }}>
                   {renderNameWithHighlight(currentName, "card")}
                 </h2>
-                <p className="text-base mb-3" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface-variant)" }}>
+                <p className="text-[16px] leading-[24px] mb-3" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface-variant)" }}>
                   {renderNameWithHighlight(currentName, "fullname")}
                 </p>
                 <div className="flex items-center justify-center gap-2">
-                  <span className="text-sm italic" style={{ color: "var(--md-outline)" }}>
+                  <span className="text-[14px] italic leading-[20px]" style={{ color: "var(--md-outline)" }}>
                     {currentNameData?.phonetic || customNameData?.phonetic || ""}
                   </span>
                   <button
                     onClick={() => speak(currentName)}
-                    className="state-layer w-9 h-9 flex items-center justify-center rounded-full"
+                    className="state-layer w-10 h-10 flex items-center justify-center rounded-full"
                     style={{ color: "var(--md-on-surface-variant)" }}
                   >
                     <Icon name="volume_up" size={20} />
@@ -540,95 +725,106 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Info rows */}
-              <div className="px-6 pb-3">
-                <div className="flex items-start gap-3 py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                  <Icon name="public" size={20} className="" style={{ color: "var(--md-on-surface-variant)", marginTop: 1 } as React.CSSProperties} />
+              {/* Info rows — M3 list items: 16px padding, proper vertical rhythm */}
+              <div className="px-6 pb-4">
+                <div className="flex items-center gap-4 py-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                  <Icon name="public" size={20} style={{ color: "var(--md-on-surface-variant)" }} />
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs mb-0.5" style={{ color: "var(--md-on-surface-variant)" }}>Origin</div>
-                    <div className="text-sm font-medium" style={{ color: "var(--md-on-surface)" }}>
+                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Origin</div>
+                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {currentNameData?.origin || customNameData?.origin || "—"}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs mb-0.5" style={{ color: "var(--md-on-surface-variant)" }}>Syllables</div>
-                    <div className="text-sm font-medium" style={{ color: "var(--md-on-surface)" }}>
+                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Syllables</div>
+                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {currentNameData?.syllables || "—"}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-start gap-3 py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                  <Icon name="lightbulb" size={20} className="" style={{ color: "var(--md-on-surface-variant)", marginTop: 1 } as React.CSSProperties} />
+                <div className="flex items-center gap-4 py-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                  <Icon name="lightbulb" size={20} style={{ color: "var(--md-on-surface-variant)" }} />
                   <div className="flex-1">
-                    <div className="text-xs mb-0.5" style={{ color: "var(--md-on-surface-variant)" }}>Meaning</div>
-                    <div className="text-sm font-medium leading-snug" style={{ color: "var(--md-on-surface)" }}>
+                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Meaning</div>
+                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {currentNameData?.meaning || customNameData?.meaning || "—"}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-start gap-3 py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                  <Icon name="badge" size={20} className="" style={{ color: "var(--md-on-surface-variant)", marginTop: 1 } as React.CSSProperties} />
+                <div className="flex items-center gap-4 py-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                  <Icon name="badge" size={20} style={{ color: "var(--md-on-surface-variant)" }} />
                   <div className="flex-1">
-                    <div className="text-xs mb-0.5" style={{ color: "var(--md-on-surface-variant)" }}>Nicknames</div>
-                    <div className="text-sm font-medium" style={{ color: "var(--md-on-surface)" }}>
+                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Nicknames</div>
+                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {(currentNameData?.nicknames || customNameData?.nicknames || []).join(", ") || "None"}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-start gap-3 py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                  <Icon name="trending_up" size={20} className="" style={{ color: "var(--md-on-surface-variant)", marginTop: 1 } as React.CSSProperties} />
+                <div className="flex items-center gap-4 py-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                  <Icon name="trending_up" size={20} style={{ color: "var(--md-on-surface-variant)" }} />
                   <div className="flex-1">
-                    <div className="text-xs mb-0.5" style={{ color: "var(--md-on-surface-variant)" }}>Peak</div>
-                    <div className="text-sm font-medium" style={{ color: "var(--md-on-surface)" }}>
+                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Peak</div>
+                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {currentNameData?.peakDecades?.join(", ") || "—"}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs mb-0.5" style={{ color: "var(--md-on-surface-variant)" }}>Top state</div>
-                    <div className="text-sm font-medium" style={{ color: "var(--md-on-surface)" }}>
+                    <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Top state</div>
+                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
                       {currentNameData?.popularState || "—"}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Similar names — always visible as M3 assist chips */}
+              {/* Similar names — collapsible dropdown */}
               {currentNameData?.similarNames && currentNameData.similarNames.length > 0 && (
-                <div className="px-6 pb-5 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                  <div className="text-xs pt-3 pb-2" style={{ color: "var(--md-on-surface-variant)" }}>Similar names</div>
-                  <div className="flex flex-wrap gap-2">
-                    {currentNameData.similarNames.map((sn) => (
-                      <button
-                        key={sn}
-                        onClick={() => addToFavorites(sn)}
-                        className="state-layer inline-flex items-center gap-1 h-8 px-3 rounded-lg border text-sm"
-                        style={{ borderColor: "var(--md-outline)", color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}
-                      >
-                        {sn}
-                        <Icon name="favorite" size={16} className="" style={{ color: "var(--md-primary)" } as React.CSSProperties} />
-                      </button>
-                    ))}
-                  </div>
+                <div className="px-6 pb-6 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                  <button
+                    onClick={() => setSimilarOpen(!similarOpen)}
+                    className="state-layer w-full flex items-center justify-between py-3 rounded-lg"
+                    style={{ color: "var(--md-on-surface-variant)" }}
+                  >
+                    <span className="text-[12px] leading-[16px] font-medium" style={{ fontFamily: "var(--font-body)" }}>
+                      Similar names ({currentNameData.similarNames.length})
+                    </span>
+                    <Icon name={similarOpen ? "expand_less" : "expand_more"} size={20} />
+                  </button>
+                  {similarOpen && (
+                    <div className="flex flex-wrap gap-2 pt-1 pb-1">
+                      {currentNameData.similarNames.map((sn) => (
+                        <button
+                          key={sn}
+                          onClick={() => addToFavorites(sn)}
+                          className="state-layer inline-flex items-center gap-1.5 h-8 px-4 rounded-lg border text-[14px] leading-[20px]"
+                          style={{ borderColor: "var(--md-outline)", color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}
+                        >
+                          {sn}
+                          <Icon name="favorite" size={16} style={{ color: "var(--md-primary)" }} />
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           ) : (
-            <div style={{ color: "var(--md-on-surface-variant)" }} className="text-sm">Loading...</div>
+            <div style={{ color: "var(--md-on-surface-variant)" }} className="text-[14px]">Loading...</div>
           )}
         </div>
 
-        {/* Rating FABs */}
+        {/* Rating FABs — M3 spec: 56px regular FAB, 24px gap between */}
         {!isDone && currentName && (
-          <div className="flex items-center justify-center gap-4 py-5">
+          <div className="flex items-center justify-center gap-6 py-5">
             <button
               onClick={() => rateName("pass", "left")}
               className="state-layer w-14 h-14 flex items-center justify-center rounded-2xl elevation-2 transition-transform active:scale-95"
               style={{ color: "var(--md-on-surface-variant)" }}
             >
-              <Icon name="close" size={28} />
+              <Icon name="close" size={24} />
             </button>
             <button
               onClick={() => rateName("maybe", "up")}
@@ -642,14 +838,14 @@ export default function Home() {
               className="state-layer w-14 h-14 flex items-center justify-center rounded-2xl transition-transform active:scale-95"
               style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 4px 8px rgba(180,36,90,0.25)" }}
             >
-              <Icon name="favorite" filled size={28} />
+              <Icon name="favorite" filled size={24} />
             </button>
           </div>
         )}
 
-        {/* Swipe hint */}
+        {/* Swipe hint — only on first name ever */}
         {ratedCount === 0 && currentName && !isDone && (
-          <p className="text-center text-xs pb-4 -mt-2" style={{ color: "var(--md-outline)" }}>
+          <p className="text-center text-[12px] leading-[16px] pb-4 -mt-1" style={{ color: "var(--md-outline)", fontFamily: "var(--font-body)" }}>
             Swipe right to love, left to pass, up for maybe
           </p>
         )}
@@ -668,20 +864,20 @@ export default function Home() {
       const data = nameMap.get(name);
       return (
         <div className="flex items-center gap-4 px-4 py-3 state-layer" style={{ background: "var(--md-surface-container-lowest)" }}>
-          <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium" style={{ background: accent || "var(--md-primary-container)", color: accent ? "var(--md-on-tertiary-container)" : "var(--md-on-primary-container)", fontFamily: "var(--font-display)" }}>
+          <div className="w-10 h-10 rounded-full flex items-center justify-center text-[14px] font-medium shrink-0" style={{ background: accent || "var(--md-primary-container)", color: accent ? "var(--md-on-tertiary-container)" : "var(--md-on-primary-container)", fontFamily: "var(--font-display)" }}>
             {name[0]}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-base font-medium" style={{ fontFamily: "var(--font-display)" }}>
+            <div className="text-[16px] leading-[24px] font-medium" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface)" }}>
               {renderNameWithHighlight(name, "card")}
             </div>
             {data && (
-              <div className="text-xs truncate" style={{ color: "var(--md-on-surface-variant)" }}>
+              <div className="text-[12px] leading-[16px] truncate" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
                 {data.origin} &middot; {data.meaning}
               </div>
             )}
           </div>
-          <button onClick={() => removeFromShortlist(name)} className="state-layer w-10 h-10 flex items-center justify-center rounded-full" style={{ color: "var(--md-on-surface-variant)" }}>
+          <button onClick={() => removeFromShortlist(name)} className="state-layer w-10 h-10 flex items-center justify-center rounded-full shrink-0" style={{ color: "var(--md-on-surface-variant)" }}>
             <Icon name="close" size={20} />
           </button>
         </div>
@@ -698,10 +894,10 @@ export default function Home() {
         <div className="flex-1 overflow-y-auto">
           {loves.length > 0 && (
             <div className="mb-2">
-              <div className="px-4 py-3 text-xs font-medium uppercase tracking-wider" style={{ color: "var(--md-primary)", fontFamily: "var(--font-body)" }}>
+              <div className="px-4 py-3 text-[11px] font-medium uppercase tracking-[1px] leading-[16px]" style={{ color: "var(--md-primary)", fontFamily: "var(--font-body)" }}>
                 Loved ({loves.length})
               </div>
-              <div className="mx-4 rounded-xl overflow-hidden" style={{ background: "var(--md-surface-container-lowest)" }}>
+              <div className="mx-4 rounded-[16px] overflow-hidden" style={{ background: "var(--md-surface-container-lowest)" }}>
                 {loves.map((name, i) => (
                   <div key={name}>
                     {i > 0 && <div className="ml-[72px] border-t" style={{ borderColor: "var(--md-outline-variant)" }} />}
@@ -713,10 +909,10 @@ export default function Home() {
           )}
           {maybes.length > 0 && (
             <div className="mb-2">
-              <div className="px-4 py-3 text-xs font-medium uppercase tracking-wider" style={{ color: "var(--md-tertiary)", fontFamily: "var(--font-body)" }}>
+              <div className="px-4 py-3 text-[11px] font-medium uppercase tracking-[1px] leading-[16px]" style={{ color: "var(--md-tertiary)", fontFamily: "var(--font-body)" }}>
                 Maybe ({maybes.length})
               </div>
-              <div className="mx-4 rounded-xl overflow-hidden" style={{ background: "var(--md-surface-container-lowest)" }}>
+              <div className="mx-4 rounded-[16px] overflow-hidden" style={{ background: "var(--md-surface-container-lowest)" }}>
                 {maybes.map((name, i) => (
                   <div key={name}>
                     {i > 0 && <div className="ml-[72px] border-t" style={{ borderColor: "var(--md-outline-variant)" }} />}
@@ -728,9 +924,9 @@ export default function Home() {
           )}
           {loves.length === 0 && maybes.length === 0 && (
             <div className="text-center mt-24 px-8">
-              <Icon name="favorite" size={48} className="" style={{ color: "var(--md-outline-variant)" } as React.CSSProperties} />
-              <p className="mt-4 text-sm" style={{ color: "var(--md-on-surface-variant)" }}>Your shortlist is empty</p>
-              <p className="text-xs mt-1" style={{ color: "var(--md-outline)" }}>Names you love or maybe will appear here</p>
+              <Icon name="favorite" size={48} style={{ color: "var(--md-outline-variant)" }} />
+              <p className="mt-4 text-[14px] leading-[20px]" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Your shortlist is empty</p>
+              <p className="text-[12px] leading-[16px] mt-1" style={{ color: "var(--md-outline)", fontFamily: "var(--font-body)" }}>Names you love or maybe will appear here</p>
             </div>
           )}
           <div className="h-8" />
@@ -747,14 +943,14 @@ export default function Home() {
       return (
         <div className="flex items-center gap-4 px-4 py-3" style={{ borderLeft: `3px solid ${border}` }}>
           <div className="flex-1 min-w-0">
-            <div className="text-base font-medium" style={{ fontFamily: "var(--font-display)" }}>
+            <div className="text-[16px] leading-[24px] font-medium" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface)" }}>
               {renderNameWithHighlight(name, "card")}
-              <span className="ml-2 text-sm font-normal" style={{ color: "var(--md-on-surface-variant)" }}>
+              <span className="ml-2 text-[14px] font-normal" style={{ color: "var(--md-on-surface-variant)" }}>
                 {renderNameWithHighlight(name, "fullname")}
               </span>
             </div>
             {data && (
-              <div className="text-xs mt-1" style={{ color: "var(--md-on-surface-variant)" }}>
+              <div className="text-[12px] leading-[16px] mt-1" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
                 {data.origin} &middot; {data.meaning} &middot; {data.phonetic}
               </div>
             )}
@@ -765,13 +961,13 @@ export default function Home() {
 
     const Section = ({ title, icon, names, color, border }: { title: string; icon: string; names: string[]; color: string; border: string }) => names.length === 0 ? null : (
       <div className="mb-4">
-        <div className="flex items-center gap-2 px-4 py-3">
-          <Icon name={icon} filled size={20} className="" style={{ color } as React.CSSProperties} />
-          <span className="text-xs font-medium uppercase tracking-wider" style={{ color, fontFamily: "var(--font-body)" }}>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <Icon name={icon} filled size={20} style={{ color }} />
+          <span className="text-[11px] font-medium uppercase tracking-[1px] leading-[16px]" style={{ color, fontFamily: "var(--font-body)" }}>
             {title} ({names.length})
           </span>
         </div>
-        <div className="mx-4 rounded-xl overflow-hidden" style={{ background: "var(--md-surface-container-lowest)" }}>
+        <div className="mx-4 rounded-[16px] overflow-hidden" style={{ background: "var(--md-surface-container-lowest)" }}>
           {names.map((name, i) => (
             <div key={name}>
               {i > 0 && <div className="ml-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }} />}
@@ -782,26 +978,36 @@ export default function Home() {
       </div>
     );
 
+    const hasMatches = compareData && (compareData.bothLoved.length > 0 || compareData.oneLovedOneMaybe.length > 0 || compareData.bothMaybe.length > 0);
+
     return (
       <div className="min-h-dvh flex flex-col" style={{ background: "var(--md-surface-container-low)" }}>
         <TopBar
           title="Compare"
           leading={<IconButton icon="arrow_back" onClick={() => setView("rate")} />}
-          trailing={null}
+          trailing={hasMatches && loveCount >= 2 ? (
+            <button
+              onClick={() => setView("pickFirstNames")}
+              className="state-layer h-10 px-4 rounded-full text-[14px] font-medium"
+              style={{ color: "var(--md-primary)", fontFamily: "var(--font-display)" }}
+            >
+              Middle names
+            </button>
+          ) : undefined}
         />
         <div className="flex-1 overflow-y-auto">
           {!compareData ? (
-            <div className="text-center mt-24" style={{ color: "var(--md-on-surface-variant)" }}>Loading...</div>
+            <div className="text-center mt-24 text-[14px]" style={{ color: "var(--md-on-surface-variant)" }}>Loading...</div>
           ) : (
             <>
               <Section title="Both loved" icon="favorite" names={compareData.bothLoved} color="var(--md-primary)" border="var(--md-primary)" />
               <Section title="One love, one maybe" icon="thumbs_up_down" names={compareData.oneLovedOneMaybe} color="var(--md-tertiary)" border="var(--md-tertiary)" />
               <Section title="Both maybe" icon="help" names={compareData.bothMaybe} color="var(--md-outline)" border="var(--md-outline)" />
-              {compareData.bothLoved.length === 0 && compareData.oneLovedOneMaybe.length === 0 && compareData.bothMaybe.length === 0 && (
+              {!hasMatches && (
                 <div className="text-center mt-24 px-8">
-                  <Icon name="compare" size={48} className="" style={{ color: "var(--md-outline-variant)" } as React.CSSProperties} />
-                  <p className="mt-4 text-sm" style={{ color: "var(--md-on-surface-variant)" }}>No matches yet</p>
-                  <p className="text-xs mt-1" style={{ color: "var(--md-outline)" }}>Both partners need to rate names first</p>
+                  <Icon name="compare" size={48} style={{ color: "var(--md-outline-variant)" }} />
+                  <p className="mt-4 text-[14px] leading-[20px]" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>No matches yet</p>
+                  <p className="text-[12px] leading-[16px] mt-1" style={{ color: "var(--md-outline)", fontFamily: "var(--font-body)" }}>Both partners need to rate names first</p>
                 </div>
               )}
             </>
@@ -816,8 +1022,8 @@ export default function Home() {
   // ===== ADD NAME =====
   if (view === "addName") {
     const TextField = ({ label, value, onChange, placeholder, required }: { label: string; value: string; onChange: (v: string) => void; placeholder: string; required?: boolean }) => (
-      <div className="relative">
-        <label className="text-xs font-medium mb-1.5 block" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+      <div>
+        <label className="text-[12px] leading-[16px] font-medium mb-2 block" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
           {label}{required && " *"}
         </label>
         <input
@@ -825,7 +1031,7 @@ export default function Home() {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full h-14 px-4 rounded-xl border text-sm focus:outline-none transition-colors"
+          className="w-full h-[56px] px-4 rounded-[12px] border text-[16px] leading-[24px] focus:outline-none transition-colors"
           style={{
             background: "var(--md-surface-container-lowest)",
             borderColor: value ? "var(--md-primary)" : "var(--md-outline-variant)",
@@ -843,10 +1049,10 @@ export default function Home() {
         <TopBar
           title="Add a name"
           leading={<IconButton icon="arrow_back" onClick={() => setView("rate")} />}
-          trailing={null}
+          trailing={undefined}
         />
-        <div className="flex-1 overflow-y-auto px-4 pt-2">
-          <div className="rounded-xl p-5 space-y-5" style={{ background: "var(--md-surface-container-lowest)" }}>
+        <div className="flex-1 overflow-y-auto px-4 pt-4">
+          <div className="rounded-[16px] p-6 space-y-6" style={{ background: "var(--md-surface-container-lowest)" }}>
             <TextField label="Name" value={addNameForm.name} onChange={(v) => setAddNameForm({ ...addNameForm, name: v })} placeholder="e.g. Mila" required />
             <TextField label="Origin" value={addNameForm.origin} onChange={(v) => setAddNameForm({ ...addNameForm, origin: v })} placeholder="e.g. Ukrainian" />
             <TextField label="Meaning" value={addNameForm.meaning} onChange={(v) => setAddNameForm({ ...addNameForm, meaning: v })} placeholder="e.g. Gracious, dear" />
@@ -855,12 +1061,391 @@ export default function Home() {
             <button
               onClick={submitAddName}
               disabled={!addNameForm.name.trim()}
-              className="state-layer w-full h-12 rounded-full text-sm font-medium transition-opacity disabled:opacity-40"
+              className="state-layer w-full h-[40px] rounded-full text-[14px] font-medium tracking-[0.1px] transition-opacity disabled:opacity-40"
               style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", fontFamily: "var(--font-display)" }}
             >
               Add name
             </button>
           </div>
+        </div>
+        <Snackbar />
+      </div>
+    );
+  }
+
+  // ===== PICK FIRST NAMES (for middle name phase) =====
+  if (view === "pickFirstNames") {
+    const loves = progress ? Object.entries(progress.ratings).filter(([, r]) => r === "love").map(([n]) => n) : [];
+    const maybes = progress ? Object.entries(progress.ratings).filter(([, r]) => r === "maybe").map(([n]) => n) : [];
+    const candidates = [...loves, ...maybes];
+
+    return (
+      <div className="min-h-dvh flex flex-col" style={{ background: "var(--md-surface-container-low)" }}>
+        <TopBar
+          title="Pick first names"
+          leading={<IconButton icon="arrow_back" onClick={() => setView("rate")} />}
+          trailing={undefined}
+        />
+        <div className="flex-1 overflow-y-auto px-4 pt-4">
+          <div className="mb-6">
+            <h2 className="text-[16px] leading-[24px] font-medium mb-1" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface)" }}>
+              Choose your top first names
+            </h2>
+            <p className="text-[14px] leading-[20px]" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+              Select 2-5 first names to pair with middle names. You&apos;ll rate middle names in context: &quot;[First] _____ Janszyn&quot;
+            </p>
+          </div>
+
+          <div className="rounded-[16px] overflow-hidden" style={{ background: "var(--md-surface-container-lowest)" }}>
+            {candidates.map((name, i) => {
+              const isSelected = selectedFirstNames.has(name);
+              const data = nameMap.get(name);
+              return (
+                <div key={name}>
+                  {i > 0 && <div className="ml-[72px] border-t" style={{ borderColor: "var(--md-outline-variant)" }} />}
+                  <button
+                    onClick={() => {
+                      const next = new Set(selectedFirstNames);
+                      if (next.has(name)) next.delete(name);
+                      else if (next.size < 5) next.add(name);
+                      setSelectedFirstNames(next);
+                    }}
+                    className="state-layer w-full flex items-center gap-4 px-4 py-3 text-left"
+                  >
+                    <div
+                      className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-colors"
+                      style={{
+                        background: isSelected ? "var(--md-primary)" : "var(--md-primary-container)",
+                        color: isSelected ? "var(--md-on-primary)" : "var(--md-on-primary-container)",
+                      }}
+                    >
+                      {isSelected ? <Icon name="check" size={20} /> : <span className="text-[14px] font-medium" style={{ fontFamily: "var(--font-display)" }}>{name[0]}</span>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[16px] leading-[24px] font-medium" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface)" }}>
+                        {name}
+                      </div>
+                      {data && (
+                        <div className="text-[12px] leading-[16px] truncate" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+                          {data.origin} &middot; {data.meaning}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-[12px] leading-[16px] shrink-0 px-2 h-6 rounded flex items-center" style={{
+                      background: loves.includes(name) ? "var(--md-primary-container)" : "var(--md-tertiary-container)",
+                      color: loves.includes(name) ? "var(--md-on-primary-container)" : "var(--md-on-tertiary-container)",
+                      fontFamily: "var(--font-body)",
+                    }}>
+                      {loves.includes(name) ? "Loved" : "Maybe"}
+                    </div>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {candidates.length === 0 && (
+            <div className="text-center mt-16 px-8">
+              <Icon name="favorite" size={48} style={{ color: "var(--md-outline-variant)" }} />
+              <p className="mt-4 text-[14px] leading-[20px]" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+                Rate some first names first
+              </p>
+            </div>
+          )}
+
+          <div className="h-24" />
+        </div>
+
+        {/* Bottom action */}
+        {selectedFirstNames.size >= 2 && (
+          <div className="px-4 pb-6 pt-3" style={{ background: "var(--md-surface-container-low)" }}>
+            <button
+              onClick={startMiddleNamePhase}
+              className="state-layer w-full h-[56px] rounded-full text-[14px] font-medium tracking-[0.1px]"
+              style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", fontFamily: "var(--font-display)" }}
+            >
+              Rate middle names for {selectedFirstNames.size} names
+            </button>
+          </div>
+        )}
+
+        <Snackbar />
+      </div>
+    );
+  }
+
+  // ===== RATE MIDDLE NAMES =====
+  if (view === "rateMiddle") {
+    const middleOrder = progress?.middleNameOrder || [];
+    const middleIdx = progress?.middleNameIndex || 0;
+    const activeFirst = progress?.activeFirstName || "";
+    const topFirstNames = progress?.topFirstNames || [];
+    const currentMiddle = middleOrder[middleIdx];
+    const middleRatingsForFirst = progress?.middleNameRatings?.[activeFirst] || {};
+    const middleRatedCount = Object.keys(middleRatingsForFirst).length;
+    const isDone = middleIdx >= middleOrder.length;
+    const currentMiddleData = middleNameList.find(m => m.name === currentMiddle);
+
+    return (
+      <div className="flex flex-col min-h-dvh" style={{ background: "var(--md-surface-container-low)" }}>
+        <TopBar
+          title="Middle names"
+          leading={<IconButton icon="arrow_back" onClick={() => setView("rate")} />}
+          trailing={
+            <button
+              onClick={() => setView("pairings")}
+              className="state-layer h-10 px-3 rounded-full text-[14px] font-medium"
+              style={{ color: "var(--md-primary)", fontFamily: "var(--font-display)" }}
+            >
+              Pairings
+            </button>
+          }
+        />
+
+        {/* First name tabs */}
+        <div className="flex items-center gap-2 px-4 pb-3 pt-1 overflow-x-auto">
+          {topFirstNames.map(fn => (
+            <button
+              key={fn}
+              onClick={() => switchActiveFirstName(fn)}
+              className="state-layer shrink-0 h-8 px-4 rounded-lg text-[12px] font-medium leading-[16px] border transition-colors"
+              style={{
+                background: fn === activeFirst ? "var(--md-primary-container)" : "transparent",
+                color: fn === activeFirst ? "var(--md-on-primary-container)" : "var(--md-on-surface-variant)",
+                borderColor: fn === activeFirst ? "var(--md-primary-container)" : "var(--md-outline)",
+                fontFamily: "var(--font-body)",
+              }}
+            >
+              {fn}
+            </button>
+          ))}
+        </div>
+
+        {/* Progress */}
+        <div className="px-4 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[12px] leading-[16px]" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+              {middleRatedCount} rated for {activeFirst}
+            </span>
+            <span className="text-[12px] leading-[16px]" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+              {middleOrder.length - middleIdx} left
+            </span>
+          </div>
+          <div className="progress-track">
+            <div className="progress-indicator" style={{ width: `${middleOrder.length > 0 ? (middleIdx / middleOrder.length) * 100 : 0}%` }} />
+          </div>
+        </div>
+
+        {/* Card */}
+        <div className="flex-1 flex items-center justify-center px-4 overflow-hidden">
+          {isDone ? (
+            <div className="text-center px-6">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: "var(--md-primary-container)" }}>
+                <Icon name="celebration" filled size={32} style={{ color: "var(--md-on-primary-container)" }} />
+              </div>
+              <h2 className="text-[24px] font-normal mb-2" style={{ fontFamily: "var(--font-display)" }}>Done with {activeFirst}!</h2>
+              <p className="text-[14px] leading-[20px] mb-8" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+                {topFirstNames.length > 1 ? "Switch to another first name above, or view your pairings." : "View your final pairings."}
+              </p>
+              <button
+                onClick={() => setView("pairings")}
+                className="state-layer h-[40px] px-6 rounded-full text-[14px] font-medium tracking-[0.1px]"
+                style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", fontFamily: "var(--font-display)" }}
+              >
+                View Pairings
+              </button>
+            </div>
+          ) : currentMiddle ? (
+            <div
+              ref={cardRef}
+              className={`w-full max-w-sm rounded-[28px] overflow-hidden ${swipeClass || "card-enter"}`}
+              style={{ background: "var(--md-surface-container-lowest)", boxShadow: "0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05)" }}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
+              {/* Context header */}
+              <div className="px-6 pt-5 pb-2 text-center">
+                <p className="text-[14px] leading-[20px] mb-1" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+                  Middle name for
+                </p>
+                <p className="text-[18px] leading-[24px] font-medium" style={{ fontFamily: "var(--font-display)", color: "var(--md-primary)" }}>
+                  {activeFirst} _____ Janszyn
+                </p>
+              </div>
+
+              {/* Middle name */}
+              <div className="px-6 pt-4 pb-4 text-center">
+                <h2 className="text-[36px] font-medium mb-2" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.5px", color: "var(--md-on-surface)" }}>
+                  {currentMiddle}
+                </h2>
+                <p className="text-[16px] leading-[24px] mb-3" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface-variant)" }}>
+                  {activeFirst} {currentMiddle} Janszyn
+                </p>
+                <button
+                  onClick={() => speak(`${activeFirst} ${currentMiddle} Janszyn`)}
+                  className="state-layer w-10 h-10 flex items-center justify-center rounded-full mx-auto"
+                  style={{ color: "var(--md-on-surface-variant)" }}
+                >
+                  <Icon name="volume_up" size={20} />
+                </button>
+              </div>
+
+              {/* Middle name info */}
+              {currentMiddleData && (
+                <div className="px-6 pb-6">
+                  <div className="flex items-center gap-4 py-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                    <Icon name="public" size={20} style={{ color: "var(--md-on-surface-variant)" }} />
+                    <div className="flex-1">
+                      <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Origin</div>
+                      <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>{currentMiddleData.origin}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Syllables</div>
+                      <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>{currentMiddleData.syllables}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 py-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
+                    <Icon name="lightbulb" size={20} style={{ color: "var(--md-on-surface-variant)" }} />
+                    <div className="flex-1">
+                      <div className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Meaning</div>
+                      <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>{currentMiddleData.meaning}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ color: "var(--md-on-surface-variant)" }} className="text-[14px]">Loading...</div>
+          )}
+        </div>
+
+        {/* Rating FABs */}
+        {!isDone && currentMiddle && (
+          <div className="flex items-center justify-center gap-6 py-5">
+            <button
+              onClick={() => rateMiddleName(currentMiddle, "pass", "left")}
+              className="state-layer w-14 h-14 flex items-center justify-center rounded-2xl elevation-2 transition-transform active:scale-95"
+              style={{ color: "var(--md-on-surface-variant)" }}
+            >
+              <Icon name="close" size={24} />
+            </button>
+            <button
+              onClick={() => rateMiddleName(currentMiddle, "maybe", "up")}
+              className="state-layer w-12 h-12 flex items-center justify-center rounded-xl elevation-1 transition-transform active:scale-95"
+              style={{ background: "var(--md-tertiary-container)", color: "var(--md-on-tertiary-container)" }}
+            >
+              <Icon name="help" size={24} />
+            </button>
+            <button
+              onClick={() => rateMiddleName(currentMiddle, "love", "right")}
+              className="state-layer w-14 h-14 flex items-center justify-center rounded-2xl transition-transform active:scale-95"
+              style={{ background: "var(--md-primary)", color: "var(--md-on-primary)", boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 4px 8px rgba(180,36,90,0.25)" }}
+            >
+              <Icon name="favorite" filled size={24} />
+            </button>
+          </div>
+        )}
+        <Snackbar />
+      </div>
+    );
+  }
+
+  // ===== PAIRINGS =====
+  if (view === "pairings") {
+    const topFirstNames = progress?.topFirstNames || [];
+    const middleRatings = progress?.middleNameRatings || {};
+
+    // Build pairings sorted by rating
+    type Pairing = { first: string; middle: string; rating: Rating };
+    const pairings: Pairing[] = [];
+    topFirstNames.forEach(fn => {
+      const ratings = middleRatings[fn] || {};
+      Object.entries(ratings).forEach(([middle, rating]) => {
+        if (rating !== "pass") pairings.push({ first: fn, middle, rating });
+      });
+    });
+    // Sort: love first, then maybe
+    pairings.sort((a, b) => {
+      if (a.rating === "love" && b.rating !== "love") return -1;
+      if (a.rating !== "love" && b.rating === "love") return 1;
+      return 0;
+    });
+
+    const loved = pairings.filter(p => p.rating === "love");
+    const maybes = pairings.filter(p => p.rating === "maybe");
+
+    const PairingCard = ({ p, accent }: { p: Pairing; accent: string }) => (
+      <div className="flex items-center gap-4 px-4 py-4" style={{ borderLeft: `3px solid ${accent}` }}>
+        <div className="flex-1 min-w-0">
+          <div className="text-[16px] leading-[24px] font-medium" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface)" }}>
+            {p.first} {p.middle} Janszyn
+          </div>
+          <div className="text-[12px] leading-[16px] mt-1" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
+            {middleNameList.find(m => m.name === p.middle)?.meaning || ""}
+          </div>
+        </div>
+        <button
+          onClick={() => speak(`${p.first} ${p.middle} Janszyn`)}
+          className="state-layer w-10 h-10 flex items-center justify-center rounded-full shrink-0"
+          style={{ color: "var(--md-on-surface-variant)" }}
+        >
+          <Icon name="volume_up" size={20} />
+        </button>
+      </div>
+    );
+
+    return (
+      <div className="min-h-dvh flex flex-col" style={{ background: "var(--md-surface-container-low)" }}>
+        <TopBar
+          title="Final pairings"
+          leading={<IconButton icon="arrow_back" onClick={() => setView("rateMiddle")} />}
+          trailing={undefined}
+        />
+        <div className="flex-1 overflow-y-auto">
+          {loved.length > 0 && (
+            <div className="mb-4">
+              <div className="flex items-center gap-3 px-4 py-3">
+                <Icon name="favorite" filled size={20} style={{ color: "var(--md-primary)" }} />
+                <span className="text-[11px] font-medium uppercase tracking-[1px] leading-[16px]" style={{ color: "var(--md-primary)", fontFamily: "var(--font-body)" }}>
+                  Loved ({loved.length})
+                </span>
+              </div>
+              <div className="mx-4 rounded-[16px] overflow-hidden" style={{ background: "var(--md-surface-container-lowest)" }}>
+                {loved.map((p, i) => (
+                  <div key={`${p.first}-${p.middle}`}>
+                    {i > 0 && <div className="ml-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }} />}
+                    <PairingCard p={p} accent="var(--md-primary)" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {maybes.length > 0 && (
+            <div className="mb-4">
+              <div className="flex items-center gap-3 px-4 py-3">
+                <Icon name="help" size={20} style={{ color: "var(--md-tertiary)" }} />
+                <span className="text-[11px] font-medium uppercase tracking-[1px] leading-[16px]" style={{ color: "var(--md-tertiary)", fontFamily: "var(--font-body)" }}>
+                  Maybe ({maybes.length})
+                </span>
+              </div>
+              <div className="mx-4 rounded-[16px] overflow-hidden" style={{ background: "var(--md-surface-container-lowest)" }}>
+                {maybes.map((p, i) => (
+                  <div key={`${p.first}-${p.middle}`}>
+                    {i > 0 && <div className="ml-4 border-t" style={{ borderColor: "var(--md-outline-variant)" }} />}
+                    <PairingCard p={p} accent="var(--md-tertiary)" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {pairings.length === 0 && (
+            <div className="text-center mt-24 px-8">
+              <Icon name="child_care" size={48} style={{ color: "var(--md-outline-variant)" }} />
+              <p className="mt-4 text-[14px] leading-[20px]" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>No pairings yet</p>
+              <p className="text-[12px] leading-[16px] mt-1" style={{ color: "var(--md-outline)", fontFamily: "var(--font-body)" }}>Rate some middle names first</p>
+            </div>
+          )}
+          <div className="h-8" />
         </div>
         <Snackbar />
       </div>
