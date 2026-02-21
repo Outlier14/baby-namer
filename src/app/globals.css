@@ -221,6 +221,41 @@ body {
   transition: width 0.4s cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* ===== Real-time swipe drag ===== */
+.card-dragging {
+  transition: none !important;
+  cursor: grabbing;
+  will-change: transform, opacity;
+}
+
+/* Hint overlays that appear during drag */
+.swipe-hint-love {
+  position: absolute;
+  inset: 0;
+  background: rgba(34, 197, 94, 0.12);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.swipe-hint-pass {
+  position: absolute;
+  inset: 0;
+  background: rgba(239, 68, 68, 0.12);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.swipe-hint-maybe {
+  position: absolute;
+  inset: 0;
+  background: rgba(251, 191, 36, 0.12);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 10;
+}
+
 /* ===== Tutorial dialog enter ===== */
 .tutorial-enter {
   animation: tutorialEnter 0.4s cubic-bezier(0.2, 0, 0, 1);

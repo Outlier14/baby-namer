@@ -195,6 +195,7 @@ export default function Home() {
 
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const [dragHint, setDragHint] = useState<"love" | "pass" | "maybe" | null>(null);
 
   useEffect(() => {
     loadNames().then((n) => {
@@ -367,8 +368,56 @@ export default function Home() {
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   };
 
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart.current || !cardRef.current) return;
+    const dx = e.touches[0].clientX - touchStart.current.x;
+    const dy = e.touches[0].clientY - touchStart.current.y;
+
+    // Determine dominant axis
+    const isHorizontal = Math.abs(dx) >= Math.abs(dy);
+    const isUpSwipe = !isHorizontal && dy < 0;
+
+    // Apply real-time transform
+    let translateX = 0;
+    let translateY = 0;
+    let rotate = 0;
+    let opacity = 1;
+
+    if (isHorizontal) {
+      translateX = dx;
+      rotate = dx * 0.04; // subtle tilt
+      opacity = Math.max(0.5, 1 - Math.abs(dx) / 300);
+    } else if (isUpSwipe) {
+      translateY = dy;
+      opacity = Math.max(0.5, 1 - Math.abs(dy) / 300);
+    }
+
+    cardRef.current.style.transform = `translateX(${translateX}px) translateY(${translateY}px) rotate(${rotate}deg)`;
+    cardRef.current.style.opacity = String(opacity);
+    cardRef.current.classList.add("card-dragging");
+
+    // Update hint overlay
+    const threshold = 30;
+    if (Math.abs(dx) > threshold && isHorizontal) {
+      setDragHint(dx > 0 ? "love" : "pass");
+    } else if (isUpSwipe && Math.abs(dy) > threshold) {
+      setDragHint("maybe");
+    } else {
+      setDragHint(null);
+    }
+  };
+
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (!touchStart.current) return;
+
+    // Reset card transform
+    if (cardRef.current) {
+      cardRef.current.style.transform = "";
+      cardRef.current.style.opacity = "";
+      cardRef.current.classList.remove("card-dragging");
+    }
+    setDragHint(null);
+
     const dx = e.changedTouches[0].clientX - touchStart.current.x;
     const dy = e.changedTouches[0].clientY - touchStart.current.y;
     if (Math.abs(dx) < 50 && Math.abs(dy) < 50) { touchStart.current = null; return; }
@@ -702,91 +751,86 @@ export default function Home() {
             <div
               ref={cardRef}
               className={`w-full rounded-[28px] overflow-hidden ${swipeClass || "card-enter"}`}
-              style={{ background: "var(--md-surface-container-lowest)", boxShadow: "0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05)" }}
+              style={{ background: "var(--md-surface-container-lowest)", boxShadow: "0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05)", position: "relative" }}
               onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
             >
-              {/* Header section */}
-              <div className="px-6 pt-8 pb-2 text-center">
-                <h2 className="text-[32px] font-medium mb-1" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.25px", color: "var(--md-on-surface)" }}>
+              {/* Drag hint overlay */}
+              {dragHint === "love" && <div className="swipe-hint-love" />}
+              {dragHint === "pass" && <div className="swipe-hint-pass" />}
+              {dragHint === "maybe" && <div className="swipe-hint-maybe" />}
+
+              {/* Header — centered, iOS-style */}
+              <div className="px-6 pt-8 pb-4 text-center">
+                <h2 className="text-[36px] font-semibold mb-1" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.5px", color: "var(--md-on-surface)" }}>
                   {renderNameWithHighlight(currentName, "card")}
                 </h2>
-                <p className="text-[15px] leading-[22px] mb-3" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface-variant)" }}>
+                <p className="text-[16px] leading-[22px] mb-3" style={{ fontFamily: "var(--font-display)", color: "var(--md-on-surface-variant)", fontWeight: 400 }}>
                   {renderNameWithHighlight(currentName, "fullname")}
                 </p>
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex items-center justify-center gap-1">
                   <span className="text-[14px] italic leading-[20px]" style={{ color: "var(--md-outline)" }}>
                     {currentNameData?.phonetic || customNameData?.phonetic || ""}
                   </span>
                   <button
                     onClick={() => speak(currentName)}
-                    className="state-layer w-10 h-10 flex items-center justify-center rounded-full"
+                    className="state-layer w-9 h-9 flex items-center justify-center rounded-full"
                     style={{ color: "var(--md-on-surface-variant)" }}
                   >
-                    <Icon name="volume_up" size={20} />
+                    <Icon name="volume_up" size={18} />
                   </button>
                 </div>
               </div>
 
-              {/* Info grid — clean 2-column layout */}
-              <div className="px-6 pb-2">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-0">
-                  {/* Origin */}
-                  <div className="py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon name="public" size={16} style={{ color: "var(--md-on-surface-variant)" }} />
-                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Origin</span>
-                    </div>
-                    <div className="text-[14px] leading-[20px] font-medium pl-6" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+              {/* Stats row — 3-column centered pill badges */}
+              <div className="px-6 pb-4">
+                <div className="flex items-stretch justify-center gap-2">
+                  <div className="flex-1 flex flex-col items-center justify-center py-3 rounded-[16px]" style={{ background: "var(--md-surface-container)" }}>
+                    <span className="text-[10px] font-medium tracking-[0.8px] uppercase mb-1" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Origin</span>
+                    <span className="text-[13px] font-semibold text-center leading-[18px]" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-display)" }}>
                       {currentNameData?.origin || customNameData?.origin || "—"}
-                    </div>
+                    </span>
                   </div>
-                  {/* Syllables */}
-                  <div className="py-3 border-t text-right" style={{ borderColor: "var(--md-outline-variant)" }}>
-                    <div className="flex items-center justify-end gap-2 mb-1">
-                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Syllables</span>
-                    </div>
-                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+                  <div className="flex flex-col items-center justify-center py-3 px-4 rounded-[16px]" style={{ background: "var(--md-surface-container)" }}>
+                    <span className="text-[10px] font-medium tracking-[0.8px] uppercase mb-1" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Syllables</span>
+                    <span className="text-[20px] font-semibold" style={{ color: "var(--md-primary)", fontFamily: "var(--font-display)" }}>
                       {currentNameData?.syllables || "—"}
-                    </div>
+                    </span>
                   </div>
-                  {/* Meaning — full width */}
-                  <div className="col-span-2 py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon name="lightbulb" size={16} style={{ color: "var(--md-on-surface-variant)" }} />
-                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Meaning</span>
-                    </div>
-                    <div className="text-[14px] leading-[20px] font-medium pl-6" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
-                      {currentNameData?.meaning || customNameData?.meaning || "—"}
-                    </div>
-                  </div>
-                  {/* Nicknames — full width */}
-                  <div className="col-span-2 py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon name="badge" size={16} style={{ color: "var(--md-on-surface-variant)" }} />
-                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Nicknames</span>
-                    </div>
-                    <div className="text-[14px] leading-[20px] font-medium pl-6" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
-                      {(currentNameData?.nicknames || customNameData?.nicknames || []).join(", ") || "None"}
-                    </div>
-                  </div>
-                  {/* Peak + Top state */}
-                  <div className="py-3 border-t" style={{ borderColor: "var(--md-outline-variant)" }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon name="trending_up" size={16} style={{ color: "var(--md-on-surface-variant)" }} />
-                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Peak</span>
-                    </div>
-                    <div className="text-[14px] leading-[20px] font-medium pl-6" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
-                      {currentNameData?.peakDecades?.join(", ") || "—"}
-                    </div>
-                  </div>
-                  <div className="py-3 border-t text-right" style={{ borderColor: "var(--md-outline-variant)" }}>
-                    <div className="flex items-center justify-end gap-2 mb-1">
-                      <span className="text-[11px] leading-[16px] tracking-[0.5px] uppercase" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Top state</span>
-                    </div>
-                    <div className="text-[14px] leading-[20px] font-medium" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+                  <div className="flex-1 flex flex-col items-center justify-center py-3 rounded-[16px]" style={{ background: "var(--md-surface-container)" }}>
+                    <span className="text-[10px] font-medium tracking-[0.8px] uppercase mb-1" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Top state</span>
+                    <span className="text-[13px] font-semibold text-center leading-[18px]" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-display)" }}>
                       {currentNameData?.popularState || "—"}
-                    </div>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Meaning — centered, full-width */}
+              <div className="px-6 pb-3">
+                <div className="text-center px-2 py-3 rounded-[16px]" style={{ background: "var(--md-surface-container)" }}>
+                  <span className="text-[10px] font-medium tracking-[0.8px] uppercase block mb-1" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Meaning</span>
+                  <span className="text-[14px] leading-[20px]" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+                    {currentNameData?.meaning || customNameData?.meaning || "—"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Nicknames + Peak — two-column centered */}
+              <div className="px-6 pb-4">
+                <div className="flex gap-2">
+                  <div className="flex-1 text-center py-3 rounded-[16px]" style={{ background: "var(--md-surface-container)" }}>
+                    <span className="text-[10px] font-medium tracking-[0.8px] uppercase block mb-1" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Nicknames</span>
+                    <span className="text-[13px] leading-[18px]" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+                      {(currentNameData?.nicknames || customNameData?.nicknames || []).join(", ") || "None"}
+                    </span>
+                  </div>
+                  <div className="flex-1 text-center py-3 rounded-[16px]" style={{ background: "var(--md-surface-container)" }}>
+                    <span className="text-[10px] font-medium tracking-[0.8px] uppercase block mb-1" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>Peak era</span>
+                    <span className="text-[13px] leading-[18px]" style={{ color: "var(--md-on-surface)", fontFamily: "var(--font-body)" }}>
+                      {currentNameData?.peakDecades?.join(", ") || "—"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1270,10 +1314,14 @@ export default function Home() {
             <div
               ref={cardRef}
               className={`w-full max-w-sm rounded-[28px] overflow-hidden ${swipeClass || "card-enter"}`}
-              style={{ background: "var(--md-surface-container-lowest)", boxShadow: "0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05)" }}
+              style={{ background: "var(--md-surface-container-lowest)", boxShadow: "0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05)", position: "relative" }}
               onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
             >
+              {dragHint === "love" && <div className="swipe-hint-love" />}
+              {dragHint === "pass" && <div className="swipe-hint-pass" />}
+              {dragHint === "maybe" && <div className="swipe-hint-maybe" />}
               {/* Context header */}
               <div className="px-6 pt-5 pb-2 text-center">
                 <p className="text-[14px] leading-[20px] mb-1" style={{ color: "var(--md-on-surface-variant)", fontFamily: "var(--font-body)" }}>
